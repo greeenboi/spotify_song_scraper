@@ -13,6 +13,7 @@ import tkinter as tk
 from tkinter import messagebox
 import csv
 from pathlib import Path
+from CTkToolTip import CTkToolTip
 
 class SpotifyDownloaderGUI:
     def __init__(self):
@@ -55,8 +56,13 @@ class SpotifyDownloaderGUI:
         # Authentication Frame Elements
         self.client_id_entry = self.create_labeled_entry(
             self.auth_frame, "Client ID:", 0)
+        CTkToolTip(self.client_id_entry, 
+                   message="Enter your Spotify Client ID from the Spotify Developer Dashboard")
+        
         self.client_secret_entry = self.create_labeled_entry(
             self.auth_frame, "Client Secret:", 1)
+        CTkToolTip(self.client_secret_entry, 
+                   message="Enter your Spotify Client Secret from the Spotify Developer Dashboard")
         
         self.auth_button = ctk.CTkButton(
             self.auth_frame, 
@@ -64,6 +70,8 @@ class SpotifyDownloaderGUI:
             command=self.initialize_spotify
         )
         self.auth_button.grid(row=2, column=0, columnspan=2, pady=10)
+        CTkToolTip(self.auth_button, 
+                   message="Click to authenticate with Spotify using your credentials")
 
         # Playlist Frame Elements
         self.playlist_label = ctk.CTkLabel(
@@ -95,6 +103,8 @@ class SpotifyDownloaderGUI:
         )
         self.thread_slider.pack(pady=5)
         self.thread_slider.set(4)  # Default to 4 threads
+        CTkToolTip(self.thread_slider, 
+                   message="Adjust the number of simultaneous downloads (1-8)\nMore threads = faster but more resource intensive")
         
         self.thread_value_label = ctk.CTkLabel(
             self.settings_frame,
@@ -102,9 +112,7 @@ class SpotifyDownloaderGUI:
         )
         self.thread_value_label.pack(pady=5)
         self.thread_slider.configure(
-            command=lambda value: self.thread_value_label.configure(
-                text=str(int(value))
-            )
+            command=self.update_thread_value
         )
         
         # Download Frame Elements
@@ -117,6 +125,8 @@ class SpotifyDownloaderGUI:
         self.progress_bar = ctk.CTkProgressBar(self.download_frame)
         self.progress_bar.pack(pady=5, fill="x")
         self.progress_bar.set(0)
+        CTkToolTip(self.progress_bar, 
+                   message="Shows current download progress")
         
         self.download_button = ctk.CTkButton(
             self.download_frame,
@@ -124,7 +134,17 @@ class SpotifyDownloaderGUI:
             command=self.start_download_process
         )
         self.download_button.pack(pady=5)
+        CTkToolTip(self.download_button, 
+                   message="Click to start downloading the selected playlist\nFiles will be saved to /downloads folder")
 
+    def update_thread_value(self, value):
+        threads = int(value)
+        self.thread_value_label.configure(text=str(threads))
+        # Update tooltip to show current value and recommendation
+        recommendation = "Light load" if threads <= 3 else "Balanced" if threads <= 6 else "Heavy load"
+        CTkToolTip(self.thread_slider, 
+                   message=f"Current: {threads} threads - {recommendation}\nMore threads = faster but more resource intensive")
+        
     def on_playlist_select(self, event):
         selection = self.playlist_listbox.curselection()
         if selection:

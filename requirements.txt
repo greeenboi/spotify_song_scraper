@@ -2,6 +2,7 @@ async-timeout==5.0.1
 certifi==2024.8.30
 charset-normalizer==3.4.0
 colorama==0.4.6
+CTkToolTip==0.8
 customtkinter==5.2.2
 darkdetect==0.8.0
 idna==3.10
