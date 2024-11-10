@@ -76,17 +76,21 @@ class SpotifyDownloaderGUI:
         # Playlist Frame Elements
         self.playlist_label = ctk.CTkLabel(
             self.playlist_frame,
-            text="Select Playlist:"
+            text="Select Playlists:"
         )
         self.playlist_label.pack(padx=10, pady=5)
-        
-        self.playlist_listbox = tk.Listbox(
+
+        # Create scrollable frame for playlists
+        self.playlist_scrollable = ctk.CTkScrollableFrame(
             self.playlist_frame,
-            selectmode=tk.SINGLE,
-            height=10
+            height=200
         )
-        self.playlist_listbox.pack(padx=10, pady=5, fill="both", expand=True)
-        self.playlist_listbox.bind('<<ListboxSelect>>', self.on_playlist_select)
+        self.playlist_scrollable.pack(padx=10, pady=5, fill="both", expand=True)
+        
+        # Dictionary to store checkbox references
+        self.playlist_checkboxes = {}
+        CTkToolTip(self.playlist_scrollable, 
+                   message="Select the playlists you want to download")
         
         # Settings Frame Elements
         self.thread_label = ctk.CTkLabel(
@@ -145,10 +149,20 @@ class SpotifyDownloaderGUI:
         CTkToolTip(self.thread_slider, 
                    message=f"Current: {threads} threads - {recommendation}\nMore threads = faster but more resource intensive")
         
-    def on_playlist_select(self, event):
-        selection = self.playlist_listbox.curselection()
-        if selection:
-            self.selected_playlist = self.playlists[selection[0]]
+    def on_playlist_select(self, playlist):
+        """Handle playlist selection"""
+        checkbox_data = self.playlist_checkboxes[playlist['id']]
+        
+        # Deselect all other checkboxes
+        for pid, data in self.playlist_checkboxes.items():
+            if pid != playlist['id'] and data['var'].get():
+                data['checkbox'].deselect()
+        
+        # Update selected playlist
+        if checkbox_data['var'].get():
+            self.selected_playlist = playlist
+        else:
+            self.selected_playlist = None
             
     def create_labeled_entry(self, parent, label_text, row):
         label = ctk.CTkLabel(parent, text=label_text)
@@ -196,13 +210,32 @@ class SpotifyDownloaderGUI:
             results = self.sp.current_user_playlists()
             self.playlists = results['items']
             
-            # Clear and update playlist listbox
-            self.playlist_listbox.delete(0, tk.END)
+            # Clear existing checkboxes
+            for widget in self.playlist_scrollable.winfo_children():
+                widget.destroy()
+            self.playlist_checkboxes.clear()
+            
+            # Create new checkboxes for each playlist
             for playlist in self.playlists:
-                self.playlist_listbox.insert(
-                    tk.END, 
-                    f"{playlist['name']} ({playlist['tracks']['total']} tracks)"
+                var = ctk.BooleanVar()
+                checkbox = ctk.CTkCheckBox(
+                    self.playlist_scrollable,
+                    text=f"{playlist['name']} ({playlist['tracks']['total']} tracks)",
+                    variable=var,
+                    command=lambda p=playlist: self.on_playlist_select(p)
                 )
+                checkbox.pack(padx=10, pady=5, anchor="w")
+                self.playlist_checkboxes[playlist['id']] = {
+                    'checkbox': checkbox,
+                    'var': var,
+                    'playlist': playlist
+                }
+                
+                # Add tooltip with playlist details
+                CTkToolTip(checkbox, 
+                          message=f"Playlist: {playlist['name']}\n"
+                                 f"Tracks: {playlist['tracks']['total']}\n"
+                                 f"Owner: {playlist['owner']['display_name']}")
                 
         except Exception as e:
             messagebox.showerror("Error", f"Failed to fetch playlists: {str(e)}")
@@ -255,17 +288,29 @@ class SpotifyDownloaderGUI:
             except queue.Empty:
                 break
         
-        # Enable download button when all threads complete
         if all(not thread.is_alive() for thread in self.download_threads):
             self.window.after(0, self.download_button.configure, {"state": "normal"})
             self.window.after(0, self.progress_label.configure, {
                 "text": "Download complete!"
             })
+            if self.selected_playlist:
+                checkbox = self.playlist_checkboxes[self.selected_playlist['id']]
+                self.window.after(0, checkbox.configure, {"state": "normal"})
+                checkbox.deselect()
+                self.selected_playlist = None
 
     def start_download_process(self):
         if not self.selected_playlist:
             messagebox.showerror("Error", "Please select a playlist first")
             return
+
+        # Get the checkbox for selected playlist
+        checkbox_data = self.playlist_checkboxes[self.selected_playlist['id']]
+        checkbox = checkbox_data['checkbox']
+        
+        # Disable checkbox during download
+        
+        checkbox.configure(state="disabled")
 
         # Create downloads directory
         os.makedirs('downloads', exist_ok=True)
@@ -313,6 +358,7 @@ class SpotifyDownloaderGUI:
                 self.window.after(0, self.download_button.configure, {
                     "state": "normal"
                 })
+                self.window.after(0, checkbox.configure, {"state": "normal"})
 
         thread = threading.Thread(target=download_process, daemon=True)
         thread.start()
