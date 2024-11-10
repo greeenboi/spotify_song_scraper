@@ -144,6 +144,24 @@ class SpotifyDownloaderGUI:
             command=self.update_thread_value
         )
 
+        self.system_check_frame = ctk.CTkFrame(self.sidebar)
+        self.system_check_frame.pack(padx=10, pady=10, fill="x", side="bottom")
+        
+        self.check_system_button = ctk.CTkButton(
+            self.system_check_frame,
+            text="Check System Requirements",
+            command=self.check_system_requirements
+        )
+        self.check_system_button.pack(padx=5, pady=5)
+        
+        # Status label for system checks
+        self.system_status_label = ctk.CTkLabel(
+            self.system_check_frame,
+            text="System status: Not checked",
+            wraplength=280  # Wrap text to fit sidebar
+        )
+        self.system_status_label.pack(padx=5, pady=5)
+
     def create_main_area(self):
         # Create main content area
         self.main_area = ctk.CTkFrame(self.window)
@@ -611,6 +629,89 @@ class SpotifyDownloaderGUI:
         except Exception as e:
             error_message = f"Error downloading {filename}: {str(e)}"
             self.add_output(error_message)
+            return False
+        
+    def check_system_requirements(self):
+        """Check if all required system dependencies are available"""
+        requirements_met = True
+        status_messages = []
+        
+        # Check FFmpeg
+        if not self.check_ffmpeg():
+            requirements_met = False
+            status_messages.append("❌ FFmpeg not found - Required for audio conversion")
+        else:
+            status_messages.append("✓ FFmpeg installed")
+        
+        # Check python packages
+        required_packages = {
+            'yt_dlp': 'youtube-dl',
+            'spotipy': 'spotipy',
+            'customtkinter': 'customtkinter',
+            'youtube_search': 'youtube-search'
+        }
+        
+        for package, pip_name in required_packages.items():
+            if not self.check_package(package):
+                requirements_met = False
+                status_messages.append(f"❌ {pip_name} not found - pip install {pip_name}")
+            else:
+                status_messages.append(f"✓ {pip_name} installed")
+        
+        # Check temp directory
+        if not os.path.exists(self.temp_dir):
+            try:
+                os.makedirs(self.temp_dir)
+                status_messages.append("✓ Temp directory created")
+            except Exception as e:
+                requirements_met = False
+                status_messages.append("❌ Could not create temp directory")
+        else:
+            status_messages.append("✓ Temp directory exists")
+        
+        # Check downloads directory
+        if not os.path.exists('downloads'):
+            try:
+                os.makedirs('downloads')
+                status_messages.append("✓ Downloads directory created")
+            except Exception as e:
+                requirements_met = False
+                status_messages.append("❌ Could not create downloads directory")
+        else:
+            status_messages.append("✓ Downloads directory exists")
+        
+        # Update status label
+        status_text = "System status:\n" + "\n".join(status_messages)
+        if requirements_met:
+            status_text += "\n\n✅ All requirements satisfied!"
+            self.system_status_label.configure(
+                text=status_text,
+                text_color="green"
+            )
+        else:
+            status_text += "\n\n❌ Some requirements missing!"
+            self.system_status_label.configure(
+                text=status_text,
+                text_color="red"
+            )
+    def check_ffmpeg(self):
+        """Check if FFmpeg is installed and accessible"""
+        try:
+            # Try both ffmpeg and ffmpeg.exe for Windows
+            if os.system('ffmpeg -version') == 0:
+                return True
+            if os.system('ffmpeg.exe -version') == 0:
+                return True
+            return False
+        except:
+            return False
+
+    def check_package(self, package_name):
+        """Check if a Python package is installed"""
+        try:
+            __import__(package_name)
+            return True
+        except ImportError:
             return False
 
     def run(self):
