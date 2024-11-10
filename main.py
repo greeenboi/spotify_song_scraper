@@ -17,6 +17,7 @@ from CTkToolTip import CTkToolTip
 
 class SpotifyDownloaderGUI:
     def __init__(self):
+        ctk.set_default_color_theme("green")
         self.window = ctk.CTk()
         self.window.title("Fuck Spotify")
         self.window.geometry("1200x720")
@@ -44,64 +45,86 @@ class SpotifyDownloaderGUI:
         self.update_output_display()
 
     def create_gui_elements(self):
-        # Create frames
-        self.auth_frame = ctk.CTkFrame(self.window)
-        self.auth_frame.pack(padx=20, pady=20, fill="x")
+        self.create_sidebar()
+        self.create_main_area() 
+    
+    def create_sidebar(self):
+        # Create sidebar frame
+        self.sidebar = ctk.CTkFrame(
+            self.window,
+            width=300
+        )
+        self.sidebar.pack(side="left", fill="y", padx=10, pady=10)
+        self.sidebar.pack_propagate(False)  # Prevent sidebar from shrinking
         
-        self.playlist_frame = ctk.CTkFrame(self.window)
-        self.playlist_frame.pack(padx=20, pady=(0, 20), fill="both", expand=True)
+        # App title in sidebar
+        self.title_label = ctk.CTkLabel(
+            self.sidebar,
+            text="Spotify Downloader",
+            font=ctk.CTkFont(size=20, weight="bold")
+        )
+        self.title_label.pack(pady=20)
         
-        self.settings_frame = ctk.CTkFrame(self.window)
-        self.settings_frame.pack(padx=20, pady=(0, 20), fill="x")
+        # Authentication Frame in sidebar
+        self.auth_frame = ctk.CTkFrame(self.sidebar)
+        self.auth_frame.pack(padx=10, pady=10, fill="x")
         
-        self.download_frame = ctk.CTkFrame(self.window)
-        self.download_frame.pack(padx=20, pady=(0, 20), fill="x")
-
-        # Authentication Frame Elements
-        self.client_id_entry = self.create_labeled_entry(
-            self.auth_frame, "Client ID:", 0)
+        # Client ID
+        self.client_id_label = ctk.CTkLabel(
+            self.auth_frame,
+            text="Client ID:"
+        )
+        self.client_id_label.pack(padx=5, pady=(5,0))
+        
+        self.client_id_entry = ctk.CTkEntry(
+            self.auth_frame,
+            width=250
+        )
+        self.client_id_entry.pack(padx=5, pady=(0,5))
         CTkToolTip(self.client_id_entry, 
-                   message="Enter your Spotify Client ID from the Spotify Developer Dashboard")
+                   message="Enter your Spotify Client ID from the Developer Dashboard")
         
-        self.client_secret_entry = self.create_labeled_entry(
-            self.auth_frame, "Client Secret:", 1)
+        # Client Secret
+        self.client_secret_label = ctk.CTkLabel(
+            self.auth_frame,
+            text="Client Secret:"
+        )
+        self.client_secret_label.pack(padx=5, pady=(5,0))
+        
+        self.client_secret_entry = ctk.CTkEntry(
+            self.auth_frame,
+            width=250,
+            show="•"  # Hide secret with dots
+        )
+        self.client_secret_entry.pack(padx=5, pady=(0,5))
         CTkToolTip(self.client_secret_entry, 
-                   message="Enter your Spotify Client Secret from the Spotify Developer Dashboard")
+                   message="Enter your Spotify Client Secret from the Developer Dashboard")
         
+        # Authentication button
         self.auth_button = ctk.CTkButton(
-            self.auth_frame, 
-            text="Authenticate", 
+            self.auth_frame,
+            text="Authenticate",
             command=self.initialize_spotify
         )
-        self.auth_button.grid(row=2, column=0, columnspan=2, pady=10)
-        CTkToolTip(self.auth_button, 
-                   message="Click to authenticate with Spotify using your credentials")
-
-        # Playlist Frame Elements
-        self.playlist_label = ctk.CTkLabel(
-            self.playlist_frame,
-            text="Select Playlists:"
-        )
-        self.playlist_label.pack(padx=10, pady=5)
-
-        # Create scrollable frame for playlists
-        self.playlist_scrollable = ctk.CTkScrollableFrame(
-            self.playlist_frame,
-            height=200
-        )
-        self.playlist_scrollable.pack(padx=10, pady=5, fill="both", expand=True)
+        self.auth_button.pack(padx=5, pady=10)
         
-        # Dictionary to store checkbox references
-        self.playlist_checkboxes = {}
-        CTkToolTip(self.playlist_scrollable, 
-                   message="Select the playlists you want to download")
+        # Settings section in sidebar
+        self.settings_frame = ctk.CTkFrame(self.sidebar)
+        self.settings_frame.pack(padx=10, pady=10, fill="x")
         
-        # Settings Frame Elements
+        self.settings_label = ctk.CTkLabel(
+            self.settings_frame,
+            text="Download Settings",
+            font=ctk.CTkFont(weight="bold")
+        )
+        self.settings_label.pack(pady=5)
+        
+        # Thread control
         self.thread_label = ctk.CTkLabel(
             self.settings_frame,
-            text="Number of download threads:"
+            text="Download Threads:"
         )
-        self.thread_label.pack(pady=5)
+        self.thread_label.pack(pady=2)
         
         self.thread_slider = ctk.CTkSlider(
             self.settings_frame,
@@ -109,72 +132,110 @@ class SpotifyDownloaderGUI:
             to=8,
             number_of_steps=7
         )
-        self.thread_slider.pack(pady=5)
-        self.thread_slider.set(4)  # Default to 4 threads
-        CTkToolTip(self.thread_slider, 
-                   message="Adjust the number of simultaneous downloads (1-8)\nMore threads = faster but more resource intensive")
+        self.thread_slider.pack(pady=2)
+        self.thread_slider.set(4)
         
         self.thread_value_label = ctk.CTkLabel(
             self.settings_frame,
             text="4"
         )
-        self.thread_value_label.pack(pady=5)
+        self.thread_value_label.pack(pady=2)
         self.thread_slider.configure(
             command=self.update_thread_value
         )
+
+    def create_main_area(self):
+        # Create main content area
+        self.main_area = ctk.CTkFrame(self.window)
+        self.main_area.pack(side="right", fill="both", expand=True, padx=10, pady=10)
         
+        # Create TabView
+        self.tabview = ctk.CTkTabview(self.main_area)
+        self.tabview.pack(fill="both", expand=True)
+        
+        # Create tabs
+        self.playlist_tab = self.tabview.add("Playlists")
+        self.downloads_tab = self.tabview.add("Downloads")
+        self.logs_tab = self.tabview.add("Logs")
+        
+        # Playlist Tab Content
+        self.create_playlist_tab()
+        
+        # Downloads Tab Content
+        self.create_downloads_tab()
+        
+        # Logs Tab Content
+        self.create_logs_tab()
+
+    def create_playlist_tab(self):
+        # Playlist selection area
+        self.playlist_label = ctk.CTkLabel(
+            self.playlist_tab,
+            text="Available Playlists:",
+            font=ctk.CTkFont(weight="bold")
+        )
+        self.playlist_label.pack(padx=10, pady=5)
+        
+        # Create scrollable frame for playlists
+        self.playlist_scrollable = ctk.CTkScrollableFrame(
+            self.playlist_tab,
+            height=400
+        )
+        self.playlist_scrollable.pack(padx=10, pady=5, fill="both", expand=True)
+        
+        # Dictionary to store checkbox references
+        self.playlist_checkboxes = {}
+
+    def create_downloads_tab(self):
+        # Progress information
         self.progress_label = ctk.CTkLabel(
-            self.download_frame,
+            self.downloads_tab,
             text="Ready to download"
         )
         self.progress_label.pack(pady=5)
         
-        self.progress_bar = ctk.CTkProgressBar(self.download_frame)
-        self.progress_bar.pack(pady=5, fill="x")
+        self.progress_bar = ctk.CTkProgressBar(self.downloads_tab)
+        self.progress_bar.pack(pady=5, fill="x", padx=20)
         self.progress_bar.set(0)
-        CTkToolTip(self.progress_bar, 
-                   message="Shows current download progress")
         
         self.download_button = ctk.CTkButton(
-            self.download_frame,
+            self.downloads_tab,
             text="Start Download",
             command=self.start_download_process
         )
         self.download_button.pack(pady=5)
-        CTkToolTip(self.download_button, 
-                   message="Click to start downloading the selected playlist\nFiles will be saved to /downloads folder")
         
-        # Output Display Frame
-        self.output_frame = ctk.CTkFrame(self.window)
-        self.output_frame.pack(padx=20, pady=(0, 20), fill="both", expand=True)
-        
-        self.output_label = ctk.CTkLabel(
-            self.output_frame,
-            text="Download Output:"
-        )
-        self.output_label.pack(pady=5)
-        
-        # Create textbox for output
-        self.output_text = ctk.CTkTextbox(
-            self.output_frame,
+        # Current downloads display
+        self.downloads_output = ctk.CTkTextbox(
+            self.downloads_tab,
             height=200,
             wrap="word"
         )
-        self.output_text.pack(padx=10, pady=5, fill="both", expand=True)
-        self.output_text.configure(state="disabled")
-        CTkToolTip(self.output_text, 
-                   message="Shows real-time download progress and status updates")
+        self.downloads_output.pack(padx=20, pady=5, fill="both", expand=True)
+        self.downloads_output.configure(state="disabled")
         
-        # Clear output button
-        self.clear_output_button = ctk.CTkButton(
-            self.output_frame,
-            text="Clear Output",
-            command=self.clear_output
+        self.clear_downloads_button = ctk.CTkButton(
+            self.downloads_tab,
+            text="Clear Download History",
+            command=lambda: self.clear_output(self.downloads_output)
         )
-        self.clear_output_button.pack(pady=5)
-        CTkToolTip(self.clear_output_button, 
-                   message="Clear the output display")
+        self.clear_downloads_button.pack(pady=5)
+    
+    def create_logs_tab(self):
+        # Log display
+        self.output_text = ctk.CTkTextbox(
+            self.logs_tab,
+            wrap="word"
+        )
+        self.output_text.pack(padx=20, pady=5, fill="both", expand=True)
+        self.output_text.configure(state="disabled")
         
+        self.clear_logs_button = ctk.CTkButton(
+            self.logs_tab,
+            text="Clear Logs",
+            command=lambda: self.clear_output(self.output_text)
+        )
+        self.clear_logs_button.pack(pady=5)
 
     def update_thread_value(self, value):
         threads = int(value)
@@ -185,31 +246,43 @@ class SpotifyDownloaderGUI:
                    message=f"Current: {threads} threads - {recommendation}\nMore threads = faster but more resource intensive")
         
 
-    def clear_output(self):
-        """Clear the output display"""
-        self.output_text.configure(state="normal")
-        self.output_text.delete("1.0", "end")
-        self.output_text.configure(state="disabled")
+    def clear_output(self, textbox):
+        """Clear the specified textbox"""
+        textbox.configure(state="normal")
+        textbox.delete("1.0", "end")
+        textbox.configure(state="disabled")
 
-    def add_output(self, message):
+    def add_output(self, message, is_download=False):
         """Add message to output queue"""
         timestamp = datetime.now().strftime("%H:%M:%S")
-        self.output_queue.put(f"[{timestamp}] {message}\n")
+        formatted_message = f"[{timestamp}] {message}\n"
+        self.output_queue.put((formatted_message, is_download))
 
     def update_output_display(self):
-        """Update the output display with queued messages"""
+        """Update both output displays with queued messages"""
         try:
             while True:
-                message = self.output_queue.get_nowait()
+                message, is_download = self.output_queue.get_nowait()
+                
+                # Update logs tab
                 self.output_text.configure(state="normal")
                 self.output_text.insert("end", message)
-                self.output_text.see("end")  # Auto-scroll to bottom
+                self.output_text.see("end")
                 self.output_text.configure(state="disabled")
+                
+                # Update downloads tab if it's a download message
+                if is_download:
+                    self.downloads_output.configure(state="normal")
+                    self.downloads_output.insert("end", message)
+                    self.downloads_output.see("end")
+                    self.downloads_output.configure(state="disabled")
+                    
         except queue.Empty:
             pass
         finally:
             # Schedule next update
             self.window.after(100, self.update_output_display)
+
     
     def reset_states(self):
         """Reset all states after download completion"""
@@ -217,10 +290,10 @@ class SpotifyDownloaderGUI:
         self.progress_bar.set(0)
         self.progress_label.configure(text="Ready to download")
         
-        # Enable download button
+        # Enable download button in downloads tab
         self.download_button.configure(state="normal")
         
-        # Reset all checkboxes
+        # Re-enable playlist selection
         for checkbox_data in self.playlist_checkboxes.values():
             checkbox = checkbox_data['checkbox']
             checkbox.configure(state="normal")
@@ -229,6 +302,9 @@ class SpotifyDownloaderGUI:
         
         # Clear selected playlist
         self.selected_playlist = None
+        
+        # Clear current downloads list
+        self.current_downloads.clear()
         
         # Add completion message to output
         self.add_output("Download process completed. Ready for next download.")
@@ -355,7 +431,7 @@ class SpotifyDownloaderGUI:
                 self.window.after(0, self.progress_label.configure, {
                     "text": status_message
                 })
-                self.add_output(status_message)
+                self.add_output(status_message, is_download=True)
                 
                 # Download the track
                 success = self.download_track(track)
@@ -366,12 +442,12 @@ class SpotifyDownloaderGUI:
                 
                 # Add completion status to output
                 completion_message = (f"Thread {worker_id}: {status} - {track['Track Name']}"
-                                   f"{' ✓' if success else ' ✗'}")
-                self.add_output(completion_message)
+                                f"{' ✓' if success else ' ✗'}")
+                self.add_output(completion_message, is_download=True)
                 
                 # Update progress bar
                 progress = (len(self.current_downloads) - 
-                          self.download_queue.qsize()) / len(self.current_downloads)
+                        self.download_queue.qsize()) / len(self.current_downloads)
                 self.window.after(0, self.progress_bar.set, progress)
                 
                 self.download_queue.task_done()
@@ -379,11 +455,12 @@ class SpotifyDownloaderGUI:
             except queue.Empty:
                 break
         
-        self.add_output(f"Thread {worker_id}: Finished all tasks")
+        self.add_output(f"Thread {worker_id}: Finished all tasks", is_download=True)
         
-        # Check if all threads are done
+        # Check if this is the last thread to finish
         if all(not thread.is_alive() for thread in self.download_threads):
-            self.window.after(0, self.reset_states)
+            # Use after() to schedule reset_states on the main thread
+            self.window.after(100, self.reset_states)
 
 
     def start_download_process(self):
