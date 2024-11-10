@@ -18,8 +18,8 @@ from CTkToolTip import CTkToolTip
 class SpotifyDownloaderGUI:
     def __init__(self):
         self.window = ctk.CTk()
-        self.window.title("Spotify Playlist Downloader")
-        self.window.geometry("800x600")
+        self.window.title("Fuck Spotify")
+        self.window.geometry("1200x720")
         
         # Initialize variables
         self.download_queue = queue.Queue()
@@ -27,6 +27,7 @@ class SpotifyDownloaderGUI:
         self.download_threads = []
         self.playlists = []  # Store playlist data
         self.selected_playlist = None
+        self.output_queue = queue.Queue() 
         
         # Create temp directory
         self.temp_dir = Path("temp")
@@ -38,6 +39,9 @@ class SpotifyDownloaderGUI:
         # Initialize Spotify client
         self.sp = None
         self.initialize_spotify()
+
+        # Start output update timer
+        self.update_output_display()
 
     def create_gui_elements(self):
         # Create frames
@@ -119,7 +123,6 @@ class SpotifyDownloaderGUI:
             command=self.update_thread_value
         )
         
-        # Download Frame Elements
         self.progress_label = ctk.CTkLabel(
             self.download_frame,
             text="Ready to download"
@@ -140,6 +143,38 @@ class SpotifyDownloaderGUI:
         self.download_button.pack(pady=5)
         CTkToolTip(self.download_button, 
                    message="Click to start downloading the selected playlist\nFiles will be saved to /downloads folder")
+        
+        # Output Display Frame
+        self.output_frame = ctk.CTkFrame(self.window)
+        self.output_frame.pack(padx=20, pady=(0, 20), fill="both", expand=True)
+        
+        self.output_label = ctk.CTkLabel(
+            self.output_frame,
+            text="Download Output:"
+        )
+        self.output_label.pack(pady=5)
+        
+        # Create textbox for output
+        self.output_text = ctk.CTkTextbox(
+            self.output_frame,
+            height=200,
+            wrap="word"
+        )
+        self.output_text.pack(padx=10, pady=5, fill="both", expand=True)
+        self.output_text.configure(state="disabled")
+        CTkToolTip(self.output_text, 
+                   message="Shows real-time download progress and status updates")
+        
+        # Clear output button
+        self.clear_output_button = ctk.CTkButton(
+            self.output_frame,
+            text="Clear Output",
+            command=self.clear_output
+        )
+        self.clear_output_button.pack(pady=5)
+        CTkToolTip(self.clear_output_button, 
+                   message="Clear the output display")
+        
 
     def update_thread_value(self, value):
         threads = int(value)
@@ -148,6 +183,55 @@ class SpotifyDownloaderGUI:
         recommendation = "Light load" if threads <= 3 else "Balanced" if threads <= 6 else "Heavy load"
         CTkToolTip(self.thread_slider, 
                    message=f"Current: {threads} threads - {recommendation}\nMore threads = faster but more resource intensive")
+        
+
+    def clear_output(self):
+        """Clear the output display"""
+        self.output_text.configure(state="normal")
+        self.output_text.delete("1.0", "end")
+        self.output_text.configure(state="disabled")
+
+    def add_output(self, message):
+        """Add message to output queue"""
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        self.output_queue.put(f"[{timestamp}] {message}\n")
+
+    def update_output_display(self):
+        """Update the output display with queued messages"""
+        try:
+            while True:
+                message = self.output_queue.get_nowait()
+                self.output_text.configure(state="normal")
+                self.output_text.insert("end", message)
+                self.output_text.see("end")  # Auto-scroll to bottom
+                self.output_text.configure(state="disabled")
+        except queue.Empty:
+            pass
+        finally:
+            # Schedule next update
+            self.window.after(100, self.update_output_display)
+    
+    def reset_states(self):
+        """Reset all states after download completion"""
+        # Reset progress bar and label
+        self.progress_bar.set(0)
+        self.progress_label.configure(text="Ready to download")
+        
+        # Enable download button
+        self.download_button.configure(state="normal")
+        
+        # Reset all checkboxes
+        for checkbox_data in self.playlist_checkboxes.values():
+            checkbox = checkbox_data['checkbox']
+            checkbox.configure(state="normal")
+            if checkbox_data['var'].get():
+                checkbox.deselect()
+        
+        # Clear selected playlist
+        self.selected_playlist = None
+        
+        # Add completion message to output
+        self.add_output("Download process completed. Ready for next download.")
         
     def on_playlist_select(self, playlist):
         """Handle playlist selection"""
@@ -266,17 +350,24 @@ class SpotifyDownloaderGUI:
             try:
                 track = self.download_queue.get_nowait()
                 
-                # Update progress label
+                # Update progress label and add to output
+                status_message = f"Thread {worker_id}: Downloading {track['Track Name']} by {track['Artists']}"
                 self.window.after(0, self.progress_label.configure, {
-                    "text": f"Thread {worker_id}: Downloading {track['Track Name']}"
+                    "text": status_message
                 })
+                self.add_output(status_message)
                 
                 # Download the track
                 success = self.download_track(track)
                 
-                # Update CSV status
+                # Update CSV status and add to output
                 status = 'Completed' if success else 'Failed'
                 self.update_track_status(csv_path, track['Track ID'], status)
+                
+                # Add completion status to output
+                completion_message = (f"Thread {worker_id}: {status} - {track['Track Name']}"
+                                   f"{' ✓' if success else ' ✗'}")
+                self.add_output(completion_message)
                 
                 # Update progress bar
                 progress = (len(self.current_downloads) - 
@@ -288,16 +379,12 @@ class SpotifyDownloaderGUI:
             except queue.Empty:
                 break
         
+        self.add_output(f"Thread {worker_id}: Finished all tasks")
+        
+        # Check if all threads are done
         if all(not thread.is_alive() for thread in self.download_threads):
-            self.window.after(0, self.download_button.configure, {"state": "normal"})
-            self.window.after(0, self.progress_label.configure, {
-                "text": "Download complete!"
-            })
-            if self.selected_playlist:
-                checkbox = self.playlist_checkboxes[self.selected_playlist['id']]
-                self.window.after(0, checkbox.configure, {"state": "normal"})
-                checkbox.deselect()
-                self.selected_playlist = None
+            self.window.after(0, self.reset_states)
+
 
     def start_download_process(self):
         if not self.selected_playlist:
@@ -417,6 +504,7 @@ class SpotifyDownloaderGUI:
         )
         
         if not video_url:
+            self.add_output(f"Failed to find YouTube URL for: {track_info['Track Name']}")
             return False
 
         try:
@@ -444,7 +532,8 @@ class SpotifyDownloaderGUI:
             return True
             
         except Exception as e:
-            print(f"Error downloading {filename}: {str(e)}")
+            error_message = f"Error downloading {filename}: {str(e)}"
+            self.add_output(error_message)
             return False
 
     def run(self):
