@@ -285,6 +285,7 @@ class SpotifyDownloaderGUI:
             command=lambda: self.clear_output(self.output_text)
         )
         self.clear_logs_button.pack(pady=5)
+        
     
     def update_timer(self):
         """Update the elapsed time display"""
@@ -307,10 +308,16 @@ class SpotifyDownloaderGUI:
         
 
     def clear_output(self, textbox):
-        """Clear the specified textbox"""
+        """Clear the specified textbox and reset timer"""
+        # Clear textbox
         textbox.configure(state="normal")
         textbox.delete("1.0", "end")
         textbox.configure(state="disabled")
+        
+        # Reset timer
+        self.timer_running = False
+        self.start_time = None
+        self.elapsed_label.configure(text="Time Elapsed: 00:00:00")
 
     def add_output(self, message, is_download=False, thread_id=None):
         """Add message to output queue"""
@@ -408,6 +415,40 @@ class SpotifyDownloaderGUI:
 
     def initialize_spotify(self):
         try:
+            # Check for existing cache file in current directory
+            cache_path = '.cache'
+            
+            # If cache exists and is valid, try to use it first
+            if os.path.exists(cache_path):
+                try:
+                    # Try to initialize with existing cache
+                    self.sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
+                        redirect_uri='http://localhost:8888/callback',
+                        scope='user-library-read playlist-read-private'
+                    ))
+                    
+                    # Test the connection
+                    self.sp.current_user()
+                    
+                    # If successful, update UI and fetch playlists
+                    self.add_output("Successfully authenticated with cached credentials")
+                    messagebox.showinfo(
+                        "Success", 
+                        "Successfully authenticated with cached credentials!"
+                    )
+                    self.fetch_playlists()
+                    return
+                    
+                except Exception as cache_error:
+                    self.add_output(f"Cached credentials invalid or expired: {str(cache_error)}")
+                    # If cache authentication fails, continue to manual authentication
+                    try:
+                        os.remove(cache_path)
+                        self.add_output("Removed invalid cache file")
+                    except:
+                        pass
+            
+            # If no cache or cache failed, check for client credentials
             client_id = self.client_id_entry.get()
             client_secret = self.client_secret_entry.get()
             
@@ -427,6 +468,7 @@ class SpotifyDownloaderGUI:
             
             # Test the connection
             self.sp.current_user()
+            self.add_output("Successfully authenticated with provided credentials")
             messagebox.showinfo(
                 "Success", 
                 "Successfully authenticated with Spotify!"
@@ -436,6 +478,7 @@ class SpotifyDownloaderGUI:
             self.fetch_playlists()
             
         except Exception as e:
+            self.add_output(f"Authentication failed: {str(e)}")
             messagebox.showerror("Error", f"Authentication failed: {str(e)}")
 
     def fetch_playlists(self):
@@ -575,6 +618,7 @@ class SpotifyDownloaderGUI:
                 tracks = self.get_playlist_tracks(self.selected_playlist['id'])
                 self.current_downloads = tracks
 
+                
                 # Save tracks to CSV
                 csv_path = self.save_tracks_to_csv(
                     tracks, 
@@ -670,6 +714,17 @@ class SpotifyDownloaderGUI:
             return False
 
         try:
+            # Create sanitized playlist folder name
+            playlist_name = "".join(
+                x for x in self.selected_playlist['name']
+                if x.isalnum() or x in [' ', '-', '_']
+            ).rstrip()
+            
+            # Create playlist directory
+            playlist_dir = os.path.join('downloads', playlist_name)
+            os.makedirs(playlist_dir, exist_ok=True)
+            
+            # Create sanitized filename
             filename = f"{track_info['Track Name']} - {track_info['Artists']}"
             filename = "".join(
                 x for x in filename 
@@ -683,7 +738,7 @@ class SpotifyDownloaderGUI:
                     'preferredcodec': 'mp3',
                     'preferredquality': '192',
                 }],
-                'outtmpl': f'downloads/{filename}.%(ext)s',
+                'outtmpl': os.path.join(playlist_dir, f'{filename}.%(ext)s'),
                 'quiet': True,
                 'no_warnings': True
             }
@@ -736,7 +791,7 @@ class SpotifyDownloaderGUI:
         else:
             status_messages.append("✓ Temp directory exists")
         
-        # Check downloads directory
+        # Check main downloads directory
         if not os.path.exists('downloads'):
             try:
                 os.makedirs('downloads')
@@ -761,6 +816,7 @@ class SpotifyDownloaderGUI:
                 text=status_text,
                 text_color="red"
             )
+
     def check_ffmpeg(self):
         """Check if FFmpeg is installed and accessible"""
         try:
