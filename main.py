@@ -22,6 +22,19 @@ class SpotifyDownloaderGUI:
         self.window.title("Fuck Spotify")
         self.window.geometry("1200x720")
         
+        self.thread_colors = [
+            "#FF6B6B",  # Red
+            "#4ECDC4",  # Teal
+            "#45B7D1",  # Blue
+            "#96CEB4",  # Green
+            "#FFEEAD",  # Yellow
+            "#D4A5A5",  # Pink
+            "#9FA8DA",  # Purple
+            "#FFE082"   # Orange
+        ]
+        self.start_time = None
+        self.timer_running = False
+
         # Initialize variables
         self.download_queue = queue.Queue()
         self.current_downloads = []
@@ -60,7 +73,7 @@ class SpotifyDownloaderGUI:
         # App title in sidebar
         self.title_label = ctk.CTkLabel(
             self.sidebar,
-            text="Spotify Downloader",
+            text="Fuck Spotify",
             font=ctk.CTkFont(size=20, weight="bold")
         )
         self.title_label.pack(pady=20)
@@ -240,7 +253,18 @@ class SpotifyDownloaderGUI:
         self.clear_downloads_button.pack(pady=5)
     
     def create_logs_tab(self):
-        # Log display
+        # Create timer frame at top
+        self.timer_frame = ctk.CTkFrame(self.logs_tab)
+        self.timer_frame.pack(padx=20, pady=5, fill="x")
+        
+        self.elapsed_label = ctk.CTkLabel(
+            self.timer_frame,
+            text="Time Elapsed: 00:00:00",
+            font=ctk.CTkFont(size=14, weight="bold")
+        )
+        self.elapsed_label.pack(pady=5)
+        
+        # Log display with tags for colors
         self.output_text = ctk.CTkTextbox(
             self.logs_tab,
             wrap="word"
@@ -248,12 +272,30 @@ class SpotifyDownloaderGUI:
         self.output_text.pack(padx=20, pady=5, fill="both", expand=True)
         self.output_text.configure(state="disabled")
         
+        # Create tags for each thread color
+        for i, color in enumerate(self.thread_colors):
+            self.output_text.tag_config(f'thread_{i+1}', foreground=color)
+        
+        # Default tag for non-thread messages
+        self.output_text.tag_config('default', foreground="white")
+        
         self.clear_logs_button = ctk.CTkButton(
             self.logs_tab,
             text="Clear Logs",
             command=lambda: self.clear_output(self.output_text)
         )
         self.clear_logs_button.pack(pady=5)
+    
+    def update_timer(self):
+        """Update the elapsed time display"""
+        if self.start_time and self.timer_running:
+            elapsed = datetime.now() - self.start_time
+            # Convert to hours, minutes, seconds
+            hours, remainder = divmod(int(elapsed.total_seconds()), 3600)
+            minutes, seconds = divmod(remainder, 60)
+            time_str = f"Time Elapsed: {hours:02d}:{minutes:02d}:{seconds:02d}"
+            self.elapsed_label.configure(text=time_str)
+            self.window.after(1000, self.update_timer)  # Update every second
 
     def update_thread_value(self, value):
         threads = int(value)
@@ -270,21 +312,32 @@ class SpotifyDownloaderGUI:
         textbox.delete("1.0", "end")
         textbox.configure(state="disabled")
 
-    def add_output(self, message, is_download=False):
+    def add_output(self, message, is_download=False, thread_id=None):
         """Add message to output queue"""
         timestamp = datetime.now().strftime("%H:%M:%S")
         formatted_message = f"[{timestamp}] {message}\n"
-        self.output_queue.put((formatted_message, is_download))
+        self.output_queue.put((formatted_message, is_download, thread_id))
 
     def update_output_display(self):
         """Update both output displays with queued messages"""
         try:
             while True:
-                message, is_download = self.output_queue.get_nowait()
+                message, is_download, thread_id = self.output_queue.get_nowait()
                 
-                # Update logs tab
+                # Update logs tab with color
                 self.output_text.configure(state="normal")
+                start_index = self.output_text.index("end-1c")
                 self.output_text.insert("end", message)
+                end_index = self.output_text.index("end-1c")
+                
+                # Apply color tag based on thread ID
+                if thread_id is not None:
+                    # Use modulo to cycle through colors if more threads than colors
+                    color_index = (thread_id - 1) % len(self.thread_colors)
+                    self.output_text.tag_add(f'thread_{thread_id}', start_index, end_index)
+                else:
+                    self.output_text.tag_add('default', start_index, end_index)
+                
                 self.output_text.see("end")
                 self.output_text.configure(state="disabled")
                 
@@ -308,6 +361,8 @@ class SpotifyDownloaderGUI:
         self.progress_bar.set(0)
         self.progress_label.configure(text="Ready to download")
         
+        self.timer_running = False
+
         # Enable download button in downloads tab
         self.download_button.configure(state="normal")
         
@@ -440,51 +495,63 @@ class SpotifyDownloaderGUI:
         df.to_csv(csv_path, index=False)
 
     def download_worker(self, worker_id, csv_path):
-        while True:
-            try:
-                track = self.download_queue.get_nowait()
+        try:
+            while True:
+                try:
+                    track = self.download_queue.get_nowait()
+                    
+                    # Update progress label and add to output
+                    status_message = f"Thread {worker_id}: Downloading {track['Track Name']} by {track['Artists']}"
+                    self.window.after(0, self.progress_label.configure, {
+                        "text": status_message
+                    })
+                    self.add_output(status_message, is_download=True, thread_id=worker_id)
+                    
+                    # Download the track
+                    success = self.download_track(track)
+                    
+                    # Update CSV status and add to output
+                    status = 'Completed' if success else 'Failed'
+                    self.update_track_status(csv_path, track['Track ID'], status)
+                    
+                    completion_message = (f"Thread {worker_id}: {status} - {track['Track Name']}"
+                                    f"{' ✓' if success else ' ✗'}")
+                    self.add_output(completion_message, is_download=True, thread_id=worker_id)
+                    
+                    # Update progress bar
+                    progress = (len(self.current_downloads) - 
+                            self.download_queue.qsize()) / len(self.current_downloads)
+                    self.window.after(0, self.progress_bar.set, progress)
+                    
+                    self.download_queue.task_done()
+                    
+                except queue.Empty:
+                    break
                 
-                # Update progress label and add to output
-                status_message = f"Thread {worker_id}: Downloading {track['Track Name']} by {track['Artists']}"
-                self.window.after(0, self.progress_label.configure, {
-                    "text": status_message
-                })
-                self.add_output(status_message, is_download=True)
-                
-                # Download the track
-                success = self.download_track(track)
-                
-                # Update CSV status and add to output
-                status = 'Completed' if success else 'Failed'
-                self.update_track_status(csv_path, track['Track ID'], status)
-                
-                # Add completion status to output
-                completion_message = (f"Thread {worker_id}: {status} - {track['Track Name']}"
-                                f"{' ✓' if success else ' ✗'}")
-                self.add_output(completion_message, is_download=True)
-                
-                # Update progress bar
-                progress = (len(self.current_downloads) - 
-                        self.download_queue.qsize()) / len(self.current_downloads)
-                self.window.after(0, self.progress_bar.set, progress)
-                
-                self.download_queue.task_done()
-                
-            except queue.Empty:
-                break
-        
-        self.add_output(f"Thread {worker_id}: Finished all tasks", is_download=True)
-        
-        # Check if this is the last thread to finish
-        if all(not thread.is_alive() for thread in self.download_threads):
-            # Use after() to schedule reset_states on the main thread
-            self.window.after(100, self.reset_states)
+            self.add_output(f"Thread {worker_id}: Finished all tasks", is_download=True, thread_id=worker_id)
+            
+        finally:
+            # When thread is finishing, schedule a check for all threads
+            self.window.after(0, self.check_thread_completion)
 
+
+    def check_thread_completion(self):
+        """Check if all download threads have completed and reset if they have"""
+        if all(not thread.is_alive() for thread in self.download_threads):
+            # All threads are done, schedule reset_states
+            self.window.after(100, self.reset_states)
+        else:
+            # Some threads still running, check again in 100ms
+            self.window.after(100, self.check_thread_completion)
 
     def start_download_process(self):
         if not self.selected_playlist:
             messagebox.showerror("Error", "Please select a playlist first")
             return
+        
+        self.start_time = datetime.now()
+        self.timer_running = True
+        self.update_timer()
 
         # Get the checkbox for selected playlist
         checkbox_data = self.playlist_checkboxes[self.selected_playlist['id']]
