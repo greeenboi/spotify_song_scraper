@@ -6,7 +6,7 @@ So I made a Quick-Fix to migrate to my own Song Player. `(in Progress)`
 ## Description
 
 This Project allows you to quickly download all the songs from your Spotify Playlist and save them to your local machine.
-It would require you to first sign up for the [Spotify Developer API]('https://developer.spotify.com') and get your own `Client ID` and `Client Secret` to use this project.
+It would require you to first sign up for the [Spotify Developer API](https://developer.spotify.com) and get your own `Client ID` and `Client Secret` to use this project.
 
 ## Project Structure
 
