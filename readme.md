@@ -55,7 +55,7 @@ It would require you to first sign up for the [Spotify Developer API](https://de
 
 ## License
 
-MIT License
+GPL 3.0 License
 
 ## Author
 
