@@ -17,6 +17,6 @@ six==1.16.0
 spotipy==2.25.1
 tqdm==4.67.0
 tzdata==2024.2
-urllib3==2.2.3
+urllib3==2.5.0
 youtube-search==2.1.2
 yt-dlp==2024.11.4
